@@ -1,37 +1,43 @@
 👑 Decoding the Crown: King Felipe VI
-A text-mining deep dive into 10 years of Spanish Royal rhetoric (2014–2023) — identifying the evolution of themes, sentiment, and persuasive linguistic markers.
+A Text Mining project that analyzes a decade of Spanish Royal rhetoric (2014–2023) — identifying the evolution of themes, sentiment, and persuasive linguistic markers.
 
-📊 Interactive Analysis → Your_LastName_TMFinalAssignment.Rmd
+| 📊 Main Executable → _____
 
 📂 Repository Structure
 Plaintext
 TM-Final-Assignment-FelipeVI/
 ├── data/
-│   └── speeches/          # Raw .txt files (2014_FelipeVI.txt, etc.)
+│   └── speeches/          # Raw .txt transcripts (2014–2023)
 ├── output/
 │   ├── plots/             # Visualizations (Sentiment arcs, Wordclouds)
-│   └── models/            # STM (Structural Topic Models) objects
-├── TM_Final_Assignment.Rmd # Main executable R Notebook
+│   └── models/            # STM (Topic Models) and DFM objects
+├── TM_Final_Assignment.Rmd # Full Narrative + Analysis Pipeline
 └── README.md              # Project documentation
-🎯 The Mission
-Does the King’s message change in times of crisis? We use data science to shift the reader's state of knowledge from "hearing a speech" to "visualizing a strategy." We answer:
+📋 Overview
+This project applies computational linguistics to answer a central question: Does the King’s message change in times of crisis? We shift the reader's state of knowledge by visualizing 10 years of political strategy through text data.
 
-Thematic Evolution: Which topics have defined the decade of his reign?
+🛠️ Technical Methodology
+Preprocessing: Custom cleaning pipeline using quanteda for Spanish-specific stemming and stopword removal.
 
-Emotional Pulse: How has sentiment fluctuated across years of social change?
+Analysis: Quantitative mapping of the King's vocabulary via Document-Feature Matrices (DFM).
 
-Persuasive DNA: What specific N-grams and structures make these speeches "Royal"?
+Visualization: A narrative-driven R Notebook featuring:
 
-🛠 The Toolkit
-We utilize the quanteda ecosystem and modern NLP techniques to process the corpus:
+Sentiment Trajectory: Tracking emotional fluctuations across a decade of social change.
 
-Preprocessing: Cleaning, stopword removal, and Spanish-specific stemming.
-
-DFM Construction: Quantitative mapping of the King's vocabulary via Document-Feature Matrices.
-
-N-gram Analysis: Extracting bigrams and trigrams to identify "signature phrases" of the Crown.
+N-gram Mining: Identifying the "signature phrases" and bigrams that define Royal discourse.
 
 Topic Modeling (STM): Uncovering latent themes and their evolution over time.
 
-⚙️ Requirements
-To reproduce this analysis, ensure the following libraries are installed in your R environment:
+🚀 How to Run
+Clone this repository.
+
+Ensure you have the .txt files in the data/speeches/ folder.
+
+Open TM_Final_Assignment.Rmd in RStudio.
+
+Run the first code cell to install and load the Requirements (quanteda, tidytext, stm).
+
+Click "Knit" or "Run All" to generate the final report.
+
+Data Source: All transcripts are sourced from the official Casa Real archive.
