@@ -20,7 +20,7 @@ TM-Final-Assignment-FelipeVI/
 ```
 
 ### 📋 Overview
-This project applies Computational Linguistics to answer a central question: Does the King’s message change in times of crisis? We shift the reader's state of knowledge by visualizing 10 years of political strategy through text data, providing meaningful insights without requiring a full reading of the corpus.
+This project applies Computational Linguistics to answer a central question: *Does the King’s message change in times of crisis?* We shift the reader's state of knowledge by visualizing 10 years of political strategy through text data, providing meaningful insights without requiring a full reading of the corpus.
 
 ### 🛠️ Technical Methodology
 **Extraction**: Systematic ingestion of annual Christmas transcripts (2014–2023) from the official Casa Real archive.
