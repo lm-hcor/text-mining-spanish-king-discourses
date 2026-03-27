@@ -1,0 +1,233 @@
+---
+title: "EyzaguirreVenegas_MoranGarciaQuijada_HerreraCorrales_TMFinalAsignment"
+author: José Manuel Eyzaguirre Venegas, Carlos Morán García Quijada, Luis Miguel Herrera
+  Corrales
+date: "`r Sys.Date()`"
+output:
+  html_document: 
+    theme: cerulean
+    highlight: tango
+    number_sections: no
+    toc: yes
+    toc_depth: 1
+  pdf_document:
+    theme: cerulean
+    highlight: tango
+    number_sections: yes
+    toc: yes
+    toc_depth: 1
+editor_options:
+  chunk_output_type: console
+---
+
+```{=html}
+<style>
+body {
+  text-align: justify;
+}
+</style>
+```
+
+# Decoding the Crown: An analysis of King Felipe VI's speeches (2014-2024).
+
+Words reflect reality. Moreover, when those analyzed are the words of a political leader or an overall influential person, words have the power to express hidden historical procedures, varying social climates, and the consequences of a profound crisis. That is the reason why words are worth attention and the underlying motivation of this work. Taking advantage of a recurrent political speech, this work tries to overview of changes throughout more than a decade where uneven phenomena have occurred, with the humble intention of identifying changing themes, sentiments, and persuasive language markers over the Spanish Head of State Christmas discourses.
+
+Said this, the time span selected for this work covers a wide range of economic, sociopolitical, and even international changes. From a national perspective, from 2014 onwards, themes such as Felipe VI´s coronation, the Catalan Independence conflict, changing governments, corruption and political blockage, or the pandemic response have covered news and citizens' routines. Moreover, some disastrous events have happened, such as volcanic eruptions or floods. In what is more, this period has been one of great political fragmentation, volatile discourse, and frontal, even bloody political opposition.
+
+When switching the scope to the international sphere, the last decade does not seem to be calmer in any way. From the rise in tariffs to the war declaration in Ukraine, not excluding the global COVID-19 pandemic, the international context in which Spain as a country needed to navigate was a framework of instability, change, and decay of words such as multilaterality, peace, or negotiation. Hence, both locally and globally, nowadays reality reflects a very different world from the one born in 2014.
+
+In the very assumption that words change when reality changes, this work relies on computational methods to achieve the objectives already mentioned: identifying switching or evolving themes and sentiments over the years. In that light, this work uses sentiment analysis and topic modelling to inspect each Christmas speech from King Felipe VI. Hence, by the knowledge of these speeches serving as a year´s sum up coming from the voice of the highest political authority, and the usual characteristic of this kind of messages serving a recommendation for citizenship on the values of tolerance, and civic values, this corpus is expected to serve as a good proxy for evolving conceptions about the context framing them.
+
+## Data loading, pre-processing and initial descriptive analysis.
+
+That said, the following code is intended to download, inspect, split, and apply the techniques mentioned to demonstrate that words are much more than just a concatenation of letters in a specified order. As they carry meanings, they are, per se, a translation of a view in reality, which is, per se, dynamic and changeable. In the first step of that coding, the following chunk loads all discourses collected manually from the Casa Real archive accessible [here](https://www.casareal.es/ES/Actividades/Paginas/actividades_discursos-resultado.aspx?TA=D&FI=Desde&C=14).
+
+```{r speeches-loading, message=FALSE, warning=FALSE}
+# --- 1. SETUP & REQUIREMENTS ---
+# Package installation is commented out as per assignment rules.
+# install.packages("readtext")
+# install.packages(quanteda)
+# install.package(tidyverse) as we are going to use several packages within tidyverse.   Otherwise can be done install.packages(c("dplyr", "stringr"))
+library(readtext)
+library(tidyverse)
+library(quanteda)
+
+# --- 2. DATA INGESTION ---
+# We use readtext to batch-load all .txt files from the speeches subfolder.
+# The pattern "*.txt" ensures we capture all years from 2014 to 2024.
+raw_speeches <- readtext("data/speeches/*.txt")
+
+# --- 3. CORPUS CONSTRUCTION ---
+# Creating a quanteda corpus object for downstream text mining.
+speech_corpus <- corpus(raw_speeches)
+
+# --- 4. METADATA EXTRACTION (NON-OBVIOUS) ---
+# The filenames are formatted as "YYYY_speech.txt". 
+# We use a regular expression (regex) to extract the first 4 digits 
+# and assign them to a document variable called 'Year'.
+docvars(speech_corpus, "Year") <- as.numeric(gsub("^(\\d{4}).*", "\\1", docnames(speech_corpus)))
+
+# --- 5. VERIFICATION ---
+# Checking that all 11 documents are loaded correctly.
+print(paste("Total speeches loaded:", ndoc(speech_corpus)))
+head(docvars(speech_corpus))
+
+```
+
+Once the corpus is built and all speeches have been correctly loaded, it is time to split and tokenize them to ease further steps and enhance the analysis. As it is customary and also most adequate in this case, the text is split and tokenized by words, as they are conceived as the minimum informative unit present in the text analyzed. In this specific case, the package `quanteda` is used, as by being more conservative, providing more control on separators, and the split process is remained at teams hands. Moreover, words with little informational value, meaning stopwords, are filtered to clean the corpus and not impact further steps of this analysis. More specifically, words such as prepositions in Spanish are excluded from this work. That said, the following chunk replicates this process.
+
+```{r split-tokenization-stopwords, message=FALSE, warning=FALSE}
+# --- 1. PRE-CLEANING: REMOVING COMMENTS ---
+# We use gsub to find the pattern -text- and replace it with an empty string.
+# The regex '-.*?-' looks for a hyphen, any characters (lazy match), and a closing hyphen.
+cleaned_texts <- char_tolower(as.character(speech_corpus)) %>%
+                 gsub(pattern = "-.*?-", replacement = "", x = .)
+
+# --- 2. TOKENIZATION ---
+# We tokenize by 'word'. By default, quanteda removes separators, 
+# but we explicitly tell it to split on punctuation (dots) to treat them as boundaries.
+toks <- tokens(cleaned_texts, 
+               remove_punct = TRUE,   # Removes dots, commas, etc. after using them to split
+               remove_symbols = TRUE, 
+               remove_numbers = TRUE, 
+               remove_url = TRUE)
+
+# --- 3. REFINING THE "STORY" (STOPWORDS) ---
+# To make the analysis meaningful (TF-IDF/Topic Modeling), 
+# we must remove Spanish functional words (articulos, preposiciones).
+toks_clean <- tokens_remove(toks, stopwords("spanish"))
+
+# --- 4. VERIFICATION ---
+# Let's inspect the first 10 words of the 2024 speech to ensure comments are gone.
+print(head(toks_clean[[1]], 10))
+
+```
+
+Once data is split, tokenized, and filtered is both needed and correct to see and admit that although some words are per se very informative, others only have informational value when analyzed from a holistic perspective. In a nutshell, words are not isolated and thus part of a context. In what is more, some words are very dependent on the meaning of the next one following them or the previous one preceding. Hence, and both to nourish this analysis and facilitate further steps, the need to build bigrams and trigrams is justified. In what is more, as it will be necessary in the following steps, this is the correct time to build the Document Feature Matrix (DFM).
+
+```{r n-grams and DFM, message=FALSE, warning=FALSE}
+# --- 1. REQUIRED TECHNIQUE 1: N-GRAM GENERATION ---
+# We transform unstructured tokens into structured n-grams (Unigrams, Bigrams & Trigrams).
+# We keep ALL n-grams (min_termfreq = 1) because in a small, 11-speech corpus, 
+# unique phrases often represent the most important historical context.
+
+# 1.1. Generating Unigrams (Single Words)
+# This is required for the general frequency plots in next chunk.
+dfm_unigram <- dfm(toks_clean)
+
+# 1.2. Generating Bigrams (n=2)
+toks_bigram <- tokens_ngrams(toks_clean, n = 2)
+dfm_bigram  <- dfm(toks_bigram)
+
+# 1.3. Generating Trigrams (n=3)
+toks_trigram <- tokens_ngrams(toks_clean, n = 3)
+dfm_trigram  <- dfm(toks_trigram)
+
+# 1.4. CRITICAL: ATTACHING METADATA
+# We explicitly link the 'Year' variable from the original corpus to our new DFMs.
+# This prevents "Object 'Year' not found" errors during knitting.
+docvars(dfm_unigram, "Year") <- docvars(speech_corpus, "Year")
+docvars(dfm_bigram, "Year")  <- docvars(speech_corpus, "Year")
+docvars(dfm_trigram, "Year") <- docvars(speech_corpus, "Year")
+
+# 1.5. SPARSITY TEST (TECHNICAL REQUIREMENT)
+# Sparsity measures the percentage of empty cells in our data matrix.
+# Test for Bigrams
+sparsity_bigram <- sparsity(dfm_bigram) * 100
+print(paste0("Bigram Sparsity: ", round(sparsity_bigram, 2), "%"))
+
+# Test for Trigrams
+sparsity_trigram <- sparsity(dfm_trigram) * 100
+print(paste0("Trigram Sparsity: ", round(sparsity_trigram, 2), "%"))
+
+# 1.6. Verification
+# Checking that the metadata (Year) and features are correctly loaded.
+print(paste("Features in Unigram DFM:", nfeat(dfm_unigram)))
+head(docvars(dfm_bigram))
+```
+
+After building the DFM for bigrams and trigrams, it is easily observable that sparsity, meaning lexicon richness, is almost equal in both matrices built. By exhibing sparsity scores above than 90%, is not striking to note that each speech uses a varied lexicon, that might also indicate some thematic differences across the years, as words used in the years marked by the Catalonian Crisis such as independence, or elections, might not be repeated in following years, when words such as war or conflict might be used. Overall, these levels of sparsity indicate a well-diversified use of language and the fact of a specified team of writers and speech-directors behind the figure of the King.
+
+Hence, once the previous steps have built a clean and manageable dataset, it is time to run some exploratory graphs to observe the most frequent words, bigrams, and trigrams in the whole time span and also by year, to further point at some thematic differences that might be proven in the steps of topic modelling. Moreover, and finally, a word cloud is built to show in a more graphical manner most frequent words in this specific corpus.
+
+```{r exploratory-graphs, message=FALSE, warning=FALSE, fig.align='center', fig.height= 10, fig.width=10}
+# --- 5. EXPLORATORY ANALYSIS & VISUAL INSIGHTS ---
+# This section provides the visual proof of the King's rhetorical priorities.
+# We utilize ggplot2 for bar charts and quanteda.textplots for the wordcloud.
+# if not done before: install.packages(c("quanteda.textstats", "quanteda.textplots", "tidytext", "ggplot2"))
+
+library(quanteda.textstats)
+library(quanteda.textplots)
+library(tidytext)
+library(ggplot2)
+
+# --- CRITICAL STEP: Re-linking Metadata ---
+# If the DFM lost the 'Year' variable during transformation, we restore it from the corpus.
+if (!"Year" %in% names(docvars(dfm_unigram))) {
+  docvars(dfm_unigram, "Year") <- docvars(speech_corpus, "Year")
+}
+if (!"Year" %in% names(docvars(dfm_bigram))) {
+  docvars(dfm_bigram, "Year") <- docvars(speech_corpus, "Year")
+}
+
+# 5.1. TOP 20 MOST FREQUENT WORDS (OVERALL)
+# High-level view of the most used terms across the entire 2014-2024 period.
+tstat_freq_words <- textstat_frequency(dfm_unigram, n = 20)
+
+ggplot(tstat_freq_words, aes(x = reorder(feature, frequency), y = frequency)) +
+  geom_col(fill = "#2c3e50") +
+  coord_flip() +
+  labs(title = "Top 20 Most Frequent Words (Overall)", 
+       subtitle = "Analysis of the 2014-2024 decade",
+       x = NULL, y = "Absolute Frequency") +
+  theme_minimal()
+
+# 5.2. TOP 10 WORDS PER YEAR (EVOLUTION)
+# Using reorder_within to ensure bars are sorted correctly inside each facet.
+dfm_unigram %>% 
+  dfm_group(groups = Year) %>% 
+  textstat_frequency(n = 10, groups = Year) %>%
+  ggplot(aes(x = reorder_within(feature, frequency, group), y = frequency, fill = factor(group))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~group, scales = "free") +
+  scale_x_reordered() +
+  coord_flip() +
+  labs(title = "Top 10 Words per Year", 
+       subtitle = "Visualizing shifts in primary discourse themes",
+       x = NULL, y = "Frequency") +
+  theme_minimal()
+
+# 5.3. TOP 20 BIGRAMS (OVERALL)
+# Identifying the most common two-word institutional formulas.
+tstat_freq_bigram <- textstat_frequency(dfm_bigram, n = 20)
+
+ggplot(tstat_freq_bigram, aes(x = reorder(feature, frequency), y = frequency)) +
+  geom_col(fill = "#e74c3c") +
+  coord_flip() +
+  labs(title = "Most Frequent Bigrams (Overall)", 
+       x = NULL, y = "Frequency") +
+  theme_minimal()
+
+# 5.4. TOP 5 BIGRAMS PER YEAR
+# Tracking specific "signature phrases" for each historical moment.
+dfm_bigram %>% 
+  dfm_group(groups = Year) %>% 
+  textstat_frequency(n = 5, groups = Year) %>%
+  ggplot(aes(x = reorder_within(feature, frequency, group), y = frequency, fill = factor(group))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~group, scales = "free") +
+  scale_x_reordered() +
+  coord_flip() +
+  labs(title = "Evolution of Key Phrases (Bigrams)", 
+       x = NULL, y = "Frequency") +
+  theme_minimal()
+
+# 5.5. VISUAL SUMMARY: WORDCLOUD
+# Providing an intuitive "vibe" of the King's 10-year vocabulary.
+set.seed(123)
+textplot_wordcloud(dfm_unigram, 
+                   max_words = 100, 
+                   color = rev(RColorBrewer::brewer.pal(8, "RdBu")))
+```
+
+As it is easily viewable, the most frequent word is the name of the country, with repetitive mentions to society, the future, or the civic values of the country, based on the Constitution. Perhaps surprisingly, these words are very stable throughout time, although when bigrams are addressed, some thematic changes are observable across time. While in 2015, most repeated bigrams were the will (of) understanding, or the spirit (of) understanding, showing the prevalence of the Catalan crisis and the rise of new political parties putting tension on historical past revival, 2021 bigrams were marked by the fight (against the) pandemic, the worry of a stable work or growing–responsibility towards the virus. 2022 was marked by the international scope, mainly driven by the war in Ukraine, with the European-Union the most frequent bigram. Moreover, the most frequent bigrams on the corpus are greetings in different national languages, among other such as common-will, or mentions to Royal family members. Although this can be considered as stopwords, this team still found this useful, as it shows the caution and will of the discourse to include all national identifications across the territory, and a united image of the Royal family.
