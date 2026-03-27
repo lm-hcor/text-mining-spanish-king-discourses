@@ -1,41 +1,37 @@
-👑 Decoding the Crown: 10 Years of King Felipe VI’s Christmas Speeches
-This repository hosts our final Text Mining project, an analytical deep dive into the rhetoric of King Felipe VI of Spain. By examining his annual Christmas addresses from 2014 to 2023, we aim to uncover the linguistic evolution of the monarchy and the "hidden" mechanics of royal persuasion.
+👑 Decoding the Crown: King Felipe VI
+A text-mining deep dive into 10 years of Spanish Royal rhetoric (2014–2023) — identifying the evolution of themes, sentiment, and persuasive linguistic markers.
 
+📊 Interactive Analysis → Your_LastName_TMFinalAssignment.Rmd
+
+📂 Repository Structure
+Plaintext
+TM-Final-Assignment-FelipeVI/
+├── data/
+│   └── speeches/          # Raw .txt files (2014_FelipeVI.txt, etc.)
+├── output/
+│   ├── plots/             # Visualizations (Sentiment arcs, Wordclouds)
+│   └── models/            # STM (Structural Topic Models) objects
+├── TM_Final_Assignment.Rmd # Main executable R Notebook
+└── README.md              # Project documentation
 🎯 The Mission
 Does the King’s message change in times of crisis? We use data science to shift the reader's state of knowledge from "hearing a speech" to "visualizing a strategy." We answer:
 
-Thematic Evolution: Which topics have defined his reign?
+Thematic Evolution: Which topics have defined the decade of his reign?
 
-Emotional Pulse: How has sentiment fluctuated over a decade of social change?
+Emotional Pulse: How has sentiment fluctuated across years of social change?
 
 Persuasive DNA: What specific N-grams and structures make these speeches "Royal"?
 
 🛠 The Toolkit
 We utilize the quanteda ecosystem and modern NLP techniques to process the corpus:
 
-Tokenization & Preprocessing: Cleaning and filtering for high-signal analysis.
+Preprocessing: Cleaning, stopword removal, and Spanish-specific stemming.
 
-Document-Feature Matrices (DFM): Quantitative mapping of the King's vocabulary.
+DFM Construction: Quantitative mapping of the King's vocabulary via Document-Feature Matrices.
 
-N-gram Analysis: Identifying the "signature phrases" of the Spanish Crown.
+N-gram Analysis: Extracting bigrams and trigrams to identify "signature phrases" of the Crown.
 
-Sentiment Analysis: Tracking emotional trajectories across the decade.
+Topic Modeling (STM): Uncovering latent themes and their evolution over time.
 
-Topic Modeling (STM): Uncovering latent themes without human bias.
-
-📚 Data & Reproducibility
-Source: Transcripts sourced from Casa Real.
-
-Format: Raw .txt files organized by year (e.g., 2014_FelipeVI.txt).
-
-Main Notebook: TM_Final_Assignment.Rmd — a fully executable, narrative-driven R Notebook containing all code, visualizations, and insights.
-
-📂 Structure at a Glance
-Plaintext
-├── data/speeches/        # Raw speech transcripts (2014–2023)
-├── output/               # Generated visualizations and models
-├── TM_Final_Assignment.Rmd # The "Source of Truth" (Code + Story)
-└── README.md             # This guide
 ⚙️ Requirements
-To reproduce our analysis, ensure you have the following R packages installed:
-quanteda, readtext, ggplot2, tidytext, and stm.
+To reproduce this analysis, ensure the following libraries are installed in your R environment:
