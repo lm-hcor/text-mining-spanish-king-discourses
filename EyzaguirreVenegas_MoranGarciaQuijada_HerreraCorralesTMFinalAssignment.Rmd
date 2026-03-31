@@ -231,3 +231,345 @@ textplot_wordcloud(dfm_unigram,
 ```
 
 As it is easily viewable, the most frequent word is the name of the country, with repetitive mentions to society, the future, or the civic values of the country, based on the Constitution. Perhaps surprisingly, these words are very stable throughout time, although when bigrams are addressed, some thematic changes are observable across time. While in 2015, most repeated bigrams were the will (of) understanding, or the spirit (of) understanding, showing the prevalence of the Catalan crisis and the rise of new political parties putting tension on historical past revival, 2021 bigrams were marked by the fight (against the) pandemic, the worry of a stable work or growing–responsibility towards the virus. 2022 was marked by the international scope, mainly driven by the war in Ukraine, with the European-Union the most frequent bigram. Moreover, the most frequent bigrams on the corpus are greetings in different national languages, among other such as common-will, or mentions to Royal family members. Although this can be considered as stopwords, this team still found this useful, as it shows the caution and will of the discourse to include all national identifications across the territory, and a united image of the Royal family.
+
+## Sentiment Analysis on King Felipe´s speeches.
+
+Words are repositories of meaning, and as long as reflect reality they carry the weight of emotions from where they flourish. When talking about the speeches given to a crowd so inmense and diverse as a country citizenship, sentiments are of great interest, as they can reveal the nuances of context unknown when analyzing words as such. Hence, by analyzing the sentiments behind the speeches given the varied amount and intensity of events related, a more precise image of whether these times were conceived by the main political figure of Spain as positive or negative based on his speeches can be conceived as a proxy for the general sentiment of the country in that specific time.
+
+That said, some minor changes are needed from previous works. As sentiment are best performed when an holistic approach is selected, speeches need now to be splitted by paragraphs, rather than by speech. Although speeches can, per se, show some positive or negative meaning when appplying sentiment analysis, paragraphs are a most suitable, precise and rigorous selection of meaning, as it opens the windows for clearer contextual understanding. Hence, with only 11 speeches, working at the paragraph level provides a more granular view of how sentiment fluctuates within and across years. In that light, each paragraph receives a unique identifier combining the year and its position within the speech in the following chunk.
+
+```{r paragraph-split, message=FALSE, warning=FALSE}
+# --- 1. PARAGRAPH SEGMENTATION ---
+# We convert the corpus to a tidy data frame to use string manipulation.
+# Speeches are split by double line breaks (\n\n), which usually denote paragraphs.
+
+speeches_paragraphs <- speech_corpus %>%
+  # Convert quanteda corpus to a data frame while keeping metadata (Year)
+  tidy() %>%
+  # Split the 'text' column into a list of paragraphs
+  mutate(paragraph = str_split(text, "\n\n")) %>%
+  # Expand the list so each paragraph gets its own row
+  unnest(paragraph) %>%
+  # Clean whitespace and remove empty strings resulting from extra breaks
+  mutate(paragraph = str_trim(paragraph)) %>%
+  filter(paragraph != "") %>%
+  # Create a unique ID for each paragraph to track its position in the 'Story'
+  group_by(Year) %>%
+  mutate(paragraph_id = paste0(Year, "_par", row_number())) %>%
+  ungroup()
+
+# --- 2. VERIFICATION ---
+# We select the key columns to ensure the segmentation was successful.
+# Note: We use 'Year' (capitalized) as defined in your previous metadata step.
+speeches_paragraphs %>% 
+  select(Year, paragraph_id, paragraph) %>% 
+  head()
+```
+
+Once done this, it is needed to filter for stopwords and words with few if any informational value. Although a list of stopwords have been used from quanteda in previous steps, it is now updated with some other custom stopwords that in eyes of this team of researcher are conceived as of limited informational value for this specific task. That said, the following chunk replicates this process.
+
+```{r paragraph-stopwords, message=FALSE, warning=FALSE}
+# --- CUSTOM STOPWORD LEXICON ---
+# This block defines a comprehensive exclusion list to filter out "institutional noise."
+# It combines standard Spanish language stops with terms specific to Royal addresses.
+
+# 1. Standard Spanish Stopwords
+# Loading the base dictionary from the quanteda package.
+spanish_stops <- data.frame(word = quanteda::stopwords("spanish"))
+
+# 2. Discourse-Specific Exclusions
+# These terms are common to every speech and are categorized by their rhetorical function.
+custom_stops <- data.frame(word = c(
+  # National identity terms (High frequency but low thematic variance)
+  "españa", "español", "española", "españoles", "españolas",
+  "país", "nación", "nacional", "nacionales",
+  
+  # Christmas address formulas and Royal titles
+  "navidad", "feliz", "majestades", "rey", "reina", "felipe",
+  "nochebuena", "navideño",
+  
+  # Generic temporal and spatial references
+  "año", "años", "hoy", "momento", "tiempo", "día", "días",
+  
+  # High-frequency discourse verbs and fillers
+  "quiero", "decir", "hacer", "puede", "debemos", "quiere",
+  "sé", "creo", "voy", "vamos", "así", "aquí", "ahora",
+  
+  # Common modifiers and quantifiers
+  "todos", "todo", "toda", "todas", "bien", "gran", "grande",
+  "más", "muy", "tan", "siempre"
+))
+
+# 3. Master Stopword Vector
+# Combining both data frames into a single unique character vector for later use.
+final_stopwords <- unique(c(spanish_stops$word, custom_stops$word))
+```
+
+Given the stopwords are now merged and speeches are split into paragraphs, it is time to unnnest and tokenize by word, that are still conceived as the minimum informational valuable unit of text analyzed. Although this has been done in previous steps, for this specific part of the project it is repeated, under the need to filter by the customized stopwords list. In this specific case, unnest_tokens is preferred for being faster and tidier than the quanteda option.
+
+```{r tokenizing-sentiment, message=FALSE, warning=FALSE}
+# --- 1. TIDY TEXT TOKENIZATION ---
+# We break down the segmented paragraphs into individual words (tokens).
+# This creates a one-row-per-term structure while maintaining metadata (Year, paragraph_id).
+
+tidy_speeches <- speeches_paragraphs %>%
+  # Tokenize the 'paragraph' column into individual words
+  unnest_tokens(word, paragraph) %>%
+  # Apply the standard Spanish stopword filter
+  anti_join(spanish_stops, by = "word") %>%
+  # Apply our custom Royal discourse exclusion list
+  anti_join(custom_stops, by = "word")
+
+# --- 2. PREVIEW RESULTS ---
+# Verifying the structure: we should see the Year, the unique paragraph ID, and the cleaned word.
+head(tidy_speeches)
+
+```
+
+Once the data is cleaned, filtered and tokenized, it is crucial to select a lexicon over the which sentiment analysis is run. Hence, it is needed to both select and inspect the tool this analysis rely on, in order to adapt it to the language of the speeches and overcome some specific bias of the lexicon selected. That said, the course materials introduce three English-language sentiment lexicons: AFINN, Bing, and NRC. Since the corpus is in Spanish, it is required a lexicon that has been translated to this language. The NRC Word-Emotion Association Lexicon (Mohammad & Turney, 2013) is the only one among the three that offers official translations in over 100 languages, including Spanish. This team of researchers access it through the `syuzhet` package, following the methodology described by Isasi (2021) for sentiment analysis in Spanish with R.
+
+The NRC lexicon is particularly well suited for this analysis because it provides both polarity labels (positive and negative) and eight discrete emotion categories (anger, anticipation, disgust, fear, joy, sadness, surprise, and trust). This dual structure allows to go beyond simple positive-negative classification and examine the emotional profile of the speeches in greater depth, which is especially relevant for political discourse that often blends hopeful and cautionary tones.
+
+It should be noted, however, that the Spanish version of the NRC lexicon is the result of automatic translation from English, and the sentiment values assigned to each word were determined through surveys with predominantly English-speaking participants (Isasi, 2021). This introduces a potential cultural and linguistic bias that must be considered when interpreting the results. Additionally, dictionary-based approaches cannot capture negation or irony, meaning that phrases like "no estoy feliz" would still contribute a positive score through the word "feliz".
+
+```{r nrc-spanish, message=FALSE, warning=FALSE}
+
+# ---1. LIBRARIES ----
+# isntall.packages("syuzhet") if not done before
+library(syuzhet )
+
+# --- 2. LOADING THE NRC SPANISH EMOTION LEXICON ---
+# We fetch the NRC Word-Emotion Association Lexicon translated into Spanish.
+# This allows us to map the King's vocabulary to specific emotional states.
+
+# Fetching the dictionary
+nrc_es <- get_sentiment_dictionary(dictionary = "nrc", language = "spanish")
+
+# 2.1. Inspecting the Emotional Mappings
+# We view the first 10 entries to understand the structure: 'word', 'sentiment', and 'score'.
+head(nrc_es, 10)
+
+# 2.2. Technical Validation
+# We check the unique sentiment categories available in the Spanish NRC.
+unique(nrc_es$sentiment)
+```
+
+As it is shown, lexicon loads correctly with four columns: lang, word, sentiment, and value. Each row represents a single word-sentiment association, where value = 1 indicates that the word is associated with that category. Since the NRC is a multilabel lexicon, the same word can appear multiple times under different sentiment or emotion labels, for example, a word like "abandono" may be tagged as both "negative" and "sadness"
+
+That said, Bbefore applying the lexicon to the corpus, it is worth understanding its composition. Thus, it is time to examine how many words are classified under each sentiment and emotion category, and whether there is any imbalance between positive and negative terms. As discussed in the course materials, lexicon bias is a known risk in dictionary-based sentiment analysis: if a lexicon contains significantly more negative than positive words, it may skew results towards negativity regardless of the actual text content
+
+```{r nrc-inspection}
+# --- 1. PREPARING THE NRC EMOTION DICTIONARY ---
+# We align the dictionary column names with the tidytext 'word' format.
+# This ensures a seamless inner_join() with our 'tidy_speeches' object.
+
+nrc_es <- nrc_es %>%
+  rename(sentiment = sentiment, word = word)
+
+# --- 2. LEXICON BIAS CHECK (TECHNICAL REQUIREMENT) ---
+# We visualize the distribution of words across the 10 NRC categories.
+# This reveals if the lexicon is naturally weighted toward certain emotions.
+
+nrc_es %>%
+  count(sentiment, sort = TRUE) %>%
+  ggplot(aes(x = reorder(sentiment, n), y = n)) +
+  geom_col(fill = "#2c3e50") +
+  coord_flip() +
+  labs(title = "NRC Spanish Lexicon: Words per Category",
+       subtitle = "Assessing inherent lexicon bias in the Spanish translation",
+       x = NULL, y = "Absolute Word Count") +
+  theme_minimal()
+
+# --- 3. POLARITY BALANCE TEST ---
+# A specific check to compare the ratio of 'positive' vs 'negative' entries.
+# This helps us calibrate our final interpretation of the King's speeches.
+
+nrc_polarity_check <- nrc_es %>%
+  filter(sentiment %in% c("positive", "negative")) %>%
+  count(sentiment)
+
+print(nrc_polarity_check)
+
+```
+
+As it is shown, the lexicon exhibits a clear negative bias, with 3,324 negative entries compared to 2,312 positive ones. This imbalance does not invalidate cross-year comparisons, since the same bias applies uniformly to all speeches, but it should be considered when interpreting absolute sentiment scores, as this mismatch between positive and negative affects the proportion of negative and positive words found in a text, and thus making a given paragraph more likely to be considered as negative. The same logic on the contrary interpretation may apply to surprise-related words.
+
+With all that mentioned, it is time to run some analyisis on sentiment polarity of speeches selected. Following the dictionary-based approach covered in the course materials, an inner_join is performed between our tokenized speeches and the NRC polarity labels (positive and negative). This returns only words that appear in both the corpus and the lexicon, along with their polarity classification. Then a net sentiment score per year is computed by subtracting the count of negative words from the count of positive words.
+
+```{r sentiment-by-year, message=FALSE, warning=FALSE}
+# --- 1. POLARITY FILTERING & DATA INTEGRATION ---
+# We isolate the 'Positive' and 'Negative' labels from the NRC dictionary 
+# to calculate the overall emotional tone (Polarity).
+
+nrc_polarity <- nrc_es %>%
+  filter(sentiment %in% c("positive", "negative"))
+
+# --- 2. SENTIMENT TIME-SERIES CALCULATION ---
+# We join our cleaned tokens with the polarity lexicon and aggregate by Year.
+# Net Sentiment = (Number of Positive Words) - (Number of Negative Words).
+
+sentiment_by_year <- tidy_speeches %>%
+  # Merge speeches with the dictionary (only words present in both remain)
+  inner_join(nrc_polarity, by = "word") %>%
+  # Extract the 4-digit Year from the paragraph_id (Technical safety)
+  mutate(year = as.numeric(str_extract(paragraph_id, "^\\d{4}"))) %>%
+  # Count occurrences of each sentiment per year
+  count(year, sentiment) %>%
+  # Reshape data: transform 'sentiment' rows into 'positive' and 'negative' columns
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>%
+  # Calculate the final Net Sentiment Score
+  mutate(net_sentiment = positive - negative)
+
+# --- 3. RESULTS PREVIEW ---
+# This table allows us to see the "Emotional Pulse" of the Spanish Crown (2014-2024).
+sentiment_by_year
+
+```
+
+As it can be observed, all the time-span selected tend to the positive side of the balance, as the net sentiment of all speeches are positive, thus being the emotional pulse of speeches kind of biased towards positivity. This may align with some positivity bias coming from political discourses, more logically understood given the Christmas nature of the context. In what is more, some years are specifically more positive than others, with 2016 or 2023 being of noticeable attention. This might be caused by some underlying events, such as the Catalonian crisis or the Ukraine war nurturing messages of positivity against difficult times or social complezities. On the other hand, the net sentiment of year 2020 is sharply distinguished as the one with the lowest net sentiment, which might be caused by strong influence of the pandemic dramatic situation. That said, this trajectory can be better understood if it is plotted in a timeline.
+
+```{r sentiment-trajectory, message=FALSE, warning=FALSE, fig.align='center', fig.height=10, fig.width=8}
+# --- 1. VISUALIZING THE EMOTIONAL TRAJECTORY ---
+# We plot the Net Sentiment over time to identify "Highs" and "Lows" 
+# in the King's 10-year Christmas address history.
+
+ggplot(sentiment_by_year, aes(x = factor(year), y = net_sentiment, group = 1)) +
+  # Main Trend Line: Representing the 'Flow' of the decade
+  geom_line(color = "#2c3e50", linewidth = 1) +
+  # Highlight Points: Marking each specific speech for clarity
+  geom_point(color = "#e74c3c", size = 3) +
+  # Baseline (Zero): Anything above this line is "Net Positive"
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  # Labels and Titles for a professional English report
+  labs(title = "Sentiment Trajectory: King Felipe VI Christmas Speeches",
+       subtitle = "Net Sentiment = Positive words - Negative words (NRC Spanish Lexicon)",
+       x = "Year", 
+       y = "Net Sentiment Score") +
+  # Clean theme for institutional analysis
+  theme_minimal() +
+  # Rotate X-axis labels for better readability during knitting
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+In what is more, to complement the net sentiment view, the following grouped bar chart shows the absolute counts of positive and negative words per year. This helps distinguish between years where the net sentiment is low because both positive and negative language are abundant (a balanced or complex speech) versus years where one polarity clearly dominates.
+
+```{r polarity-stacked, message=FALSE, warning==FALSE, fig.align='center', fig.height=10, fig.width=8}
+# --- 1. COMPARATIVE POLARITY ANALYSIS ---
+# This visualization breaks down the raw volume of positive vs. negative terms.
+# Using 'position = dodge' allows for a direct year-by-year side comparison.
+
+tidy_speeches %>%
+  # Filter for emotional terms using the NRC polarity dictionary
+  inner_join(nrc_polarity, by = "word") %>%
+  # Extract the 4-digit Year from our paragraph tracking ID
+  mutate(year = as.numeric(str_extract(paragraph_id, "^\\d{4}"))) %>%
+  # Aggregate counts per Year and Sentiment category
+  count(year, sentiment) %>%
+  # Create the grouped bar chart
+  ggplot(aes(x = factor(year), y = n, fill = sentiment)) +
+  geom_col(position = "dodge") +
+  # Use specific institutional colors (Green for Positive, Red for Negative)
+  scale_fill_manual(values = c("negative" = "#e74c3c", "positive" = "#27ae60"),
+                    name = "Polarity") +
+  # English labels for the final report
+  labs(title = "Absolute Polarity: Positive vs. Negative Word Counts",
+       subtitle = "Longitudinal volume analysis (NRC Spanish Lexicon)",
+       x = "Year", 
+       y = "Word Count") +
+  theme_minimal() +
+  # Rotate labels for better fit in the RMarkdown output
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Once plotted, this chart clarifies an important nuance: 2020 has the lowest net sentiment not only because negative words increase sharply (95, the highest count in the corpus), but because positive words also decrease slightly (131), confirming a genuinely more negative discourse. In contrast, 2024 shows the highest positive count of the entire period (159) while also carrying a substantial negative load (83), suggesting a speech that explicitly acknowledges hardship while simultaneously offering a strong positive response.
+
+Moreover, it is not only interesting to know the count, but also to inspect what are the leading words over the positive and negative categories, or the driving words within each sentiment. Because of that, and as demonstrated in the course materials with the Bing lexicon, identifying the words that contribute most to each polarity is essential to understand what drives the sentiment scores. A word like "crisis" classified as negative may appear frequently across many years simply because it is a recurring political term, inflating the negative count without necessarily reflecting a pessimistic tone. Similarly, checking for potential misclassifications is important: a word that the NRC lexicon labels as negative may carry a neutral or even positive connotation in the context of formal political discourse.
+
+```{r top-words, fig.align='center', fig.height=10, fig.width=8}
+# --- 1. WORD-LEVEL SENTIMENT CONTRIBUTION ---
+# Identifying which specific terms are the primary drivers of our sentiment scores.
+# This ensures that our findings are based on meaningful discourse, not noise.
+
+word_sentiment_counts <- tidy_speeches %>%
+  # Filter only for words with a recognized NRC polarity
+  inner_join(nrc_polarity, by = "word") %>%
+  # Count the occurrence of each emotional word across the whole corpus
+  count(word, sentiment, sort = TRUE)
+
+# --- 2. TOP CONTRIBUTOR VISUALIZATION ---
+# We split the view into 'Positive' and 'Negative' facets to see the top 15 drivers of each.
+
+word_sentiment_counts %>%
+  group_by(sentiment) %>%
+  # Select the top 15 words per polarity group
+  slice_max(n, n = 15) %>%
+  ungroup() %>%
+  # Reorder within the facet for a clean descending bar chart
+  mutate(word = reorder_within(word, n, sentiment)) %>%
+  ggplot(aes(x = n, y = word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  # Create separate plots for positive and negative
+  facet_wrap(~sentiment, scales = "free_y") +
+  # Use tidytext's reordered scale for correctly sorted labels
+  scale_y_reordered() +
+  scale_fill_manual(values = c("negative" = "#e74c3c", "positive" = "#27ae60")) +
+  # English titles for the final project report
+  labs(title = "Top 15 Words Driving Sentiment Polarity",
+       subtitle = "Rhetorical drivers across 11 years of Christmas speeches",
+       x = "Contribution (Frequency in corpus)", 
+       y = NULL) +
+  theme_minimal()
+
+```
+
+After looking at the graph, the most notable finding is that "lucha" (struggle/fight) dominates the negative polarity, yet in Spanish political rhetoric it frequently carries a positive connotation (e.g., "lucha por la igualdad", "lucha contra la pandemia"). Similarly, "compromiso" (commitment) and "fuerza" (strength) are classified as negative despite being used in an overwhelmingly positive sense in this corpus. These cases will be examined in the following section. On the other hand, "espíritu" (will) and freedom (libertad) lead the positive side of the lexicon.
+
+Because of this circumstance, it is important to assess whether any of them are misclassified in the context of royal political speeches. As seen in the previous chart, words like "lucha" (fight/struggle), "compromiso" (commitment), "fuerza" (strength) and "situación" (situation) are classified as negative by the NRC lexicon, yet they frequently carry a neutral or positive connotation in Spanish political discourse (e.g., "lucha por la igualdad", "compromiso con los ciudadanos"). These contextual mismatches are an inherent limitation of dictionary-based sentiment analysis, as noted by Isasi (2021), and should be taken into account when interpreting the results.
+
+```{r missclasification-check, message=FALSE, warning=FALSE}
+# --- 1. FINAL QUALITY CONTROL: TOP 10 EMOTIONAL DRIVERS ---
+# Manual inspection of the top terms to ensure rhetorical relevance.
+# This table is used to validate the 'Sentiment Trajectory' results.
+
+word_sentiment_inspection <- word_sentiment_counts %>%
+  group_by(sentiment) %>%
+  # Isolate the top 10 words for each polarity
+  slice_max(n, n = 10) %>%
+  ungroup() %>%
+  # Select and clean the view for the final report
+  select(word, sentiment, n)
+
+# --- 2. DISPLAY TABLE ---
+# Using 'knitr::kable' for a professional look in the final PDF/HTML output.
+knitr::kable(word_sentiment_inspection, 
+             caption = "Top 10 Emotional Drivers by Polarity (Manual Validation)")
+```
+
+As it is easily viewable, while some words are of clear negative nuance, such as crisis, or pain, some others are of difficult correct matching because of the need of context and possible double meanings, such as fight. Given all mentioned, a wordcloud over positive and negative words is presented, to make it more graphically identifiable the previous paragraphs.
+
+```{r comparison-cloud, message=FALSE, warning=FALSE, fig.align='center', fig.height=10, fig.height=8}
+# --- 1. REQUIRED LIBRARIES ---
+# We load 'wordcloud' for the visualization and 'reshape2' for matrix transformation.
+library(wordcloud)
+library(reshape2)
+
+# --- 2. CONSTRUCTING THE WORD-SENTIMENT MATRIX ---
+# comparison.cloud requires a matrix where columns are the groups (sentiments)
+# and rows are the words.
+word_matrix <- tidy_speeches %>%
+  inner_join(nrc_polarity, by = "word") %>%
+  count(word, sentiment, sort = TRUE) %>%
+  # acast transforms the tidy data into a matrix format
+  reshape2::acast(word ~ sentiment, value.var = "n", fill = 0)
+
+# --- 3. GENERATING THE COMPARISON CLOUD ---
+# This visual contrasts the two polarities: Red (Challenges) vs. Green (Values).
+set.seed(123) # Ensures the cloud layout is the same every time you knit
+
+comparison.cloud(word_matrix, 
+                 colors = c("#e74c3c", "#27ae60"),
+                 max.words = 100,
+                 title.size = 1.5,
+                 random.order = FALSE)
+```
